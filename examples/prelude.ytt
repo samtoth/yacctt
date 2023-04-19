@@ -1,0 +1,511 @@
+module prelude where
+
+Path (A : U) (a0 a1 : A) : U = PathP (<i> A) a0 a1
+Line (A : U) : U = LineP (<i> A)
+
+--         u
+--    a0 -----> a1
+--    |         |
+-- r0 |         | r1
+--    |         |
+--    V         V
+--    b0 -----> b1
+--         v
+Square (A : U) (a0 a1 b0 b1 : A)
+               (u : Path A a0 a1) (v : Path A b0 b1)
+               (r0 : Path A a0 b0) (r1 : Path A a1 b1) : U
+ = PathP (<i> (PathP (<j> A) (u @ i) (v @ i))) r0 r1
+
+refl (A : U) (a : A) : Path A a a = <_> a
+
+reflLine (A : U) (a : A) : Line A = <_> a
+
+testEta (A : U) (a b : A) (p : Path A a b) : Path (Path A a b) p p =
+  refl (Path A a b) (<i> p @ i)
+
+mapOnPath (A B : U) (f : A -> B) (a b : A)
+          (p : Path A a b) : Path B (f a) (f b) = <i> f (p @ i)
+
+funExt (A : U) (B : A -> U) (f g : (x : A) -> B x)
+       (p : (x : A) -> Path (B x) (f x) (g x)) :
+       Path ((y : A) -> B y) f g = <i> \(a : A) -> (p a) @ i
+
+trans (A B : U) (p : Path U A B) (a : A) : B = coe 0->1 p a
+transNeg (A B : U) (p : Path U A B) (b : B) : A = coe 1->0 p b
+
+transLine (p : Line U) (a : p @ 0) : p @ 1 = coe 0->1 p a
+
+transFill (A B : U) (p : Path U A B) (a : A) :
+  PathP p a (trans A B p a) = <i> coe 0->i p a
+
+-- This proof is really slick!
+-- Compare with: https://github.com/mortberg/cubicaltt/blob/master/examples/prelude.ctt#L25
+transK (A B : U) (p : Path U A B) (a : A) :
+  Path A a (transNeg A B p (trans A B p a)) =
+  <i> coe i->0 p (coe 0->i p a)
+
+-- This does not work
+-- transNegK (A B : U) (p : Path U A B) (b : B) :
+--   Path B b (coe 0->1 p (coe 1->0 p b)) =
+--     <i> coe 0->i p (coe i->0 p b)
+
+transNegK (A B : U) (p : Path U A B) (b : B) :
+  Path B (coe 0->1 p (coe 1->0 p b)) b =
+    <i> coe i->1 p (coe 1->i p b)
+
+-- subst can be defined using trans:
+substTrans (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
+  trans (P a) (P b) (<i> P (p @ i)) e
+
+-- Or even better using coe directly:
+subst (A : U) (P : A -> U) (a b : A) (p : Path A a b) (e : P a) : P b =
+  coe 0->1 (<i> P (p @ i)) e
+
+substEq (A : U) (P : A -> U) (a : A) (e : P a) :
+  Path (P a) e (subst A P a a (<_> a) e) = <i> coe 0->i (<_> P a) e
+
+compPath (A : U) (a b c : A) (p : Path A a b) (q : Path A b c) : Path A a c =
+  <i> hcom 0->1 A [ (i=0) -> <j> a, (i=1) -> q ] (p @ i)
+
+sym (A : U) (a b : A) (p : Path A a b) : Path A b a =
+  <i> hcom 0->1 A [ (i=0) -> p, (i=1) -> <_> a ] a
+
+symDep (A B : U) (P : Path U A B) (a : A) (b : B) (p : PathP P a b) :
+  (PathP (sym U A B P) b a) =
+  <i> com 0->1 (<j> hcom 0->j U [ (i=0) -> P, (i=1) -> <_> A ] A)
+        [ (i=0) -> p , (i=1) -> <_> a ] a
+
+singl (A : U) (a : A) : U = (x : A) * Path A a x
+
+-- The connection p @ i /\ j.
+-- Inspired by: https://github.com/RedPRL/sml-redprl/blob/master/example/connection.prl
+connAnd (A : U) (a b : A) (p : Path A a b) :
+  PathP (<i> Path A a (p @ i)) (<_> a) p =
+  <i j> hcom 0->1 A [ (i=0) -> connAndWeak @ 0 , (i=1) -> connAndWeak @ j
+                    , (j=0) -> connAndWeak @ 0 , (j=1) -> connAndWeak @ i
+                    -- The diagonal is not strictly necessary, but it is cool!
+                    , (i=j) -> connAndWeak @ i ] a
+  where connAndWeak : Line (Line A) =
+          <l k> hcom 1->l A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+
+-- The diagonal of connAnd is really p!
+connAndDiag (A : U) (a b : A) (p : Path A a b) :
+  Path (Path A a b) p (<i> connAnd A a b p @ i @ i) = <_> p
+
+connOr (A : U) (a b : A) (p : Path A a b) :
+  PathP (<i> Path A (p @ i) b) p (<_> b) =
+  <i j> hcom 1->0 A [ (i=0) -> connOrWeak @ j , (i=1) -> connOrWeak @ 1
+                    , (j=0) -> connOrWeak @ i , (j=1) -> connOrWeak @ 1
+                    , (i=j) -> connOrWeak @ i ] b
+  where connOrWeak : Line (Line A) =
+          <l k> hcom 0->l A [ (k=0) -> p, (k=1) -> <_> b] (p @ k)
+
+
+contrSingl (A : U) (a b : A) (p : Path A a b) :
+  Path (singl A a) (a,<_> a) (b,p) = <i> (p @ i, connAnd A a b p @ i)
+
+J (A : U) (a : A) (C : (x : A) -> Path A a x -> U)
+  (d : C a (refl A a)) (x : A) (p : Path A a x) : C x p =
+    subst (singl A a) T (a, refl A a) (x, p) (contrSingl A a x p) d
+      where T (z : singl A a) : U = C (z.1) (z.2)
+
+-- The standard proof does not work!
+-- JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (refl A a))
+--   : Path (C a (refl A a)) d (J A a C d a (refl A a)) = undefined
+  -- substEq (singl A a) T (a, refl A a) d
+  --   where T (z : singl A a) : U = C (z.1) (z.2)
+
+-- Slicker proof of J, using a different weak 'and' connection.
+-- Inspired by https://github.com/RedPRL/sml-redprl/blob/master/example/J.prl
+J (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
+  (x : A) (p : Path A a x) : C x p =
+  coe 0->1 (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
+  where sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> p] a
+
+JEq (A : U) (a : A) (C : (x : A) -> Path A a x -> U) (d : C a (<_> a))
+   : Path (C a (<_> a)) (J A a C d a (<_> a)) d =
+   <k> com 0->1 (<i> C (cube @ i @ 1 @ k) (<j> cube @ i @ j @ k))
+       [(k=0) -> <i> coe 0->i (<i> C (sq @ i @ 1) (<j> sq @ i @ j)) d
+       ,(k=1) -> <_> d] d
+  where sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> <_> a] a
+        cube : Line (Line (Line A)) =
+          <i j k> hcom 0->j A [(k=0) -> sq @ i
+                              ,(k=1) -> <_> a
+                              ,(i=0) -> <_> a
+                              ,(i=1) -> <_> a] a
+
+-- Longform, uncurried version of the above J/JEq proof.
+
+BP (A : U) (a : A) : U = (b : A) * Path A a b
+
+bpRefl (A : U) (a : A) : BP A a = (a , <_> a)
+
+bpContr (A : U) (a : A) (p : BP A a) : Path (BP A a) (bpRefl A a) p =
+  let sq : Line (Line A) = <i j> hcom 0->j A [(i=0) -> <_> a,(i=1) -> p.2] a
+  in <i> (sq @ i @ 1 , <j> sq @ i @ j)
+
+bpContrRefl (A : U) (a : A) :
+  Path (Path (BP A a) (bpRefl A a) (bpRefl A a))
+    (bpContr A a (bpRefl A a))
+    (<_> bpRefl A a) =
+  <k i> (cube @ i @ 1 @ k , <j> cube @ i @ j @ k)
+  where cube : Line (Line (Line A)) =
+          <i j k> hcom 0->j A [(k=0) -> (bpContr A a (bpRefl A a) @ i).2
+                              ,(k=1) -> <_> a
+                              ,(i=0) -> <_> a
+                              ,(i=1) -> <_> a] a
+
+J' (A : U) (a : A) (C : BP A a -> U) (c : C (bpRefl A a)) (p : BP A a) : C p =
+  subst (BP A a) C (bpRefl A a) p (bpContr A a p) c
+
+JEq' (A : U) (a : A) (C : BP A a -> U) (c : C (bpRefl A a))
+   : Path (C (bpRefl A a)) (J' A a C c (bpRefl A a)) c =
+  <k> com 0->1 (<i> C (bpContrRefl A a @ k @ i))
+      [(k=0) -> <i> coe 0->i (<i> C (bpContr A a (bpRefl A a) @ i)) c
+      ,(k=1) -> <_> c] c
+
+connAndJ (A : U) (a : A) : (b : A) (p : Path A a b) ->
+  PathP (<i> Path A a (p @ i)) (<_> a) p = \(b : A) -> \(p : PathP (<_> A) a b) ->
+  -- J A a (\(b : A) (p : Path A a b) -> PathP (<i> Path A a (p @ i)) (<_> a) p) (<_ _> a)
+  -- Normal form
+  <i j> hcom 0->1 A
+             [ (i = 0) -> <k> hcom k->1 A
+                                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                                   , (j = 1) -> <l> coe l->1 (<_> A) a ]
+                                   (coe k->1 (<_> A) a)
+             , (i = 1) -> <k> hcom k->1 A
+                                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                                   , (j = 1) -> <l> coe l->1 (<_> A)
+                                                        (hcom 0->1 A [ (l = 0) -> <_> a
+                                                                     , (l = 1) -> p ] a) ]
+                                                        (coe k->1 (<_> A) (hcom 0->j A [ (k = 0) -> <_> a
+                                                                                       , (k = 1) -> p ] a))
+             , (j = 0) -> <_> a
+             , (j = 1) -> <_> p @ i ]
+             (hcom 0->1 A
+                   [ (j = 0) -> <l> coe l->1 (<_> A) a
+                   , (j = 1) -> <l> coe l->1 (<_> A) (hcom 0->i A [ (l = 0) -> <_> a
+                                                                  , (l = 1) -> p ] a) ]
+                                                                  (coe 0->1 (<_> A) a))
+
+
+-- h-levels
+
+prop (A : U) : U = (a b : A) -> Path A a b
+set (A : U) : U = (a b : A) -> prop (Path A a b)
+groupoid (A : U) : U = (a b : A) -> set (Path A a b)
+twogroupoid (A : U) : U = (a b : A) -> groupoid (Path A a b)
+
+-- the collection of all sets
+SET : U = (X:U) * set X
+
+propSet (A : U) (h : prop A) : set A =
+ \(a b : A) (p q : Path A a b) ->
+   <j i> hcom 0->1 A [ (i=0) -> h a a
+                     , (i=1) -> h a b
+                     , (j=0) -> h a (p @ i)
+                     , (j=1) -> h a (q @ i)] a
+
+setGroupoid (A : U) (h : set A) : groupoid A =
+  \(a b : A) -> propSet (Path A a b) (h a b)
+
+groupoidTwoGroupoid (A : U) (h : groupoid A) : twogroupoid A =
+  \(a b : A) -> setGroupoid (Path A a b) (h a b)
+
+propIsProp (A : U) : prop (prop A) =
+  \(f g : prop A) -> <i> \(a b : A) ->
+    propSet A f a b (f a b) (g a b) @ i
+
+setIsProp (A : U) : prop (set A) =
+  \(f g : set A) -> <i> \(a b :A) ->
+   propIsProp (Path A a b) (f a b) (g a b) @ i
+
+PathS (A : U) (P : A -> U) (a0 a1 : A)
+  (p : Path A a0 a1) (u0 : P a0) (u1 : P a1) : U =
+    PathP (<i> P (p @ i)) u0 u1
+
+lemProp (A : U) (h : A -> prop A) : prop A =
+  \(a : A) -> h a a
+
+-- Compare with: https://github.com/mortberg/cubicaltt/blob/master/examples/prelude.ctt#L205
+lemPropF (A : U) (P : A -> U) (pP : (x : A) -> prop (P x)) (a0 a1 :A)
+         (p : Path A a0 a1) (b0 : P a0) (b1 : P a1) :
+         PathP (<i>P (p@i)) b0 b1 =
+  <i> pP (p @ i) (coe 0->i (<j> P (p @ j)) b0) (coe 1->i (<j> P (p @ j)) b1) @ i
+
+Sigma (A : U) (B : A -> U) : U = (x : A) * B x
+
+lemSig (A : U) (B : A -> U) (pB : (x : A) -> prop (B x))
+       (u v : (x:A) * B x) (p : Path A u.1 v.1) :
+       Path ((x:A) * B x) u v =
+  <i> (p@i,(lemPropF A B pB u.1 v.1 p u.2 v.2)@i)
+
+propSig (A : U) (B : A -> U) (pA : prop A)
+        (pB : (x : A) -> prop (B x)) (t u : (x:A) * B x) :
+        Path ((x:A) * B x) t u =
+  lemSig A B pB t u (pA t.1 u.1)
+
+propPi (A : U) (B : A -> U) (h : (x : A) -> prop (B x))
+       (f0 f1 : (x : A) -> B x) : Path ((x : A) -> B x) f0 f1
+  = <i> \(x : A) -> h x (f0 x) (f1 x) @ i
+
+-- Equivalent definition of isContr
+isInhProp (A : U) : U = (_ : A) * ((x y : A) -> Path A x y)
+
+-- isContr RedPRL style
+isContr (A : U) : U = (x : A) * ((y : A) -> Path A y x)
+
+isInhPropToIsContr (A : U) (h : isInhProp A) : isContr A =
+  (h.1,\(y : A) -> h.2 y h.1)
+
+isContrToIsInhProp (A : U) (h : isContr A) : isInhProp A =
+  (h.1,\(x y : A) -> <i> hcom 1->0 A [(i=0) -> h.2 x, (i=1) -> h.2 y] h.1)
+
+fiber (A B : U) (f : A -> B) (b : B) : U =
+  (a : A) * Path B (f a) b
+
+isInhPropProp (A : U) (h : isInhProp A) : prop A = h.2
+
+isContrProp (A : U) (h : isContr A) : prop A =
+  \(a b : A) -> <i> hcom 1->0 A [ (i = 0) -> h.2 a, (i = 1) -> h.2 b ] h.1
+
+-- See below for a proof without connections
+-- propIsContrConn (A : U) (z0 z1 : isContr A) : Path (isContr A) z0 z1 =
+--  <j> (p0 a1 @ j
+--      ,\(x : A) -> <i> hcom 0->1 A
+--                               [ (i=0) -> <k> p0 a1 @ j
+--                               , (i=1) -> <k> connOr A a0 x (p0 x) @ j @ k
+--                               , (j=0) -> <k> connAnd A a0 x (p0 x) @ i @ k
+--                               , (j=1) -> <k> p1 x @ i ]
+--                               (lem1 x@i@j))
+--  where
+--   a0 : A = z0.1
+--   p0 : (x : A) -> Path A a0 x = z0.2
+--   a1 : A = z1.1
+--   p1 : (x : A) -> Path A a1 x = z1.2
+--   lem1 (x : A) : PathP (<i> Path A a0 (p1 x @ i)) (p0 a1) (p0 x) =
+--     <i j> p0 (p1 x @ i) @ j
+
+propIsContr (A : U) : prop (isContr A) = lemProp (isContr A) rem
+  where
+  rem (t : isContr A) : prop (isContr A) = propSig A T pA pB
+    where
+    T (x : A) : U = (y : A) -> Path A y x
+    pA (x y : A) : Path A x y =
+      <i> hcom 1->0 A [(i=0) -> <_> x, (i=1) -> t.2 y] (t.2 x @ i)
+    pB (x : A) : prop (T x) =
+      propPi A (\(y : A) -> Path A y x) (\(y : A) -> propSet A pA y x)
+
+fiber (A B : U) (f : A -> B) (b : B) : U =
+  (a : A) * Path B (f a) b
+
+isEquiv (A B : U) (f : A -> B) : U = (b : B) -> isContr (fiber A B f b)
+
+equiv (A B : U) : U = (f : A -> B) * isEquiv A B f
+
+idfun (A : U) (a : A) : A = a
+
+idEquiv (A : U) : equiv A A =
+  (idfun A,
+  \(a : A) -> ((a,<_> a),
+               \(f : fiber A A (idfun A) a) -> <i> (hcom 1->0 A [(i=0) -> f.2, (i=1) -> <_> a] a
+                                                   ,<j> hcom 1->j A [(i=0) -> f.2,(i=1) -> <_> a] a)))
+
+isEquivInhProp (A B : U) (f : A -> B) : U = (b : B) -> isInhProp (fiber A B f b)
+
+equivInhProp (A B : U) : U = (f : A -> B) * isEquivInhProp A B f
+
+equivToEquivInhProp (A B : U) (f : equiv A B) : equivInhProp A B =
+  (f.1,\(b : B) -> isContrToIsInhProp (fiber A B f.1 b) (f.2 b))
+
+equivInhPropToEquiv (A B : U) (f : equivInhProp A B) : equiv A B =
+  (f.1,\(b : B) -> isInhPropToIsContr (fiber A B f.1 b) (f.2 b))
+
+idEquivInhProp (A : U) : equivInhProp A A = equivToEquivInhProp A A (idEquiv A)
+
+-- propIsEquiv without connections. normal form is big, but typechecks
+propIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
+  \(u0 u1 : isEquiv A B f) ->
+  <i> \(y : B) -> propIsContr (fiber A B f y) (u0 y) (u1 y) @ i
+
+-- We should adapt this proof!
+connAndNoDiag (A : U) (a b : A) (p : Path A a b) :
+  PathP (<i> Path A a (p @ i)) (<_> a) p =
+  <i j> hcom 0->1 A [ (i=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (i=1) -> <k> hcom 1->j A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (j=0) -> <k> hcom 1->0 A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k)
+                    , (j=1) -> <k> hcom 1->i A [ (k=0) -> <_> a, (k=1) -> p ] (p @ k) ] a
+
+propIsEquivDirect (A B : U) (f : A -> B) : prop (isEquiv A B f) =
+  \(p q : isEquiv A B f) ->
+  <i> \(y : B) ->
+    let p0 : A = (p y).1.1
+        p1 : Path B (f p0) y = (p y).1.2
+        p2 : (w1 : fiber A B f y) -> Path (fiber A B f y) w1 (p0,p1) = (p y).2
+        q0 : A = (q y).1.1
+        q1 : Path B (f q0) y = (q y).1.2
+        q2 : (w1 : fiber A B f y) -> Path (fiber A B f y) w1 (q0,q1) = (q y).2
+    in (q2 (p0,p1) @ i,
+       \(w : fiber A B f y) ->
+          let sq : PathP (<j> Path (fiber A B f y) w (q2 (p0,p1) @ j)) (p2 w) (q2 w) =
+                <i j> hcom 0->1 (fiber A B f y)
+                           [ (i = 0) -> <k> connAndNoDiag (fiber A B f y) w (p0,p1) (p2 w) @ k @ j
+                           , (i = 1) -> <_> q2 w @ j
+                           , (j = 0) -> <_> w
+                           , (j = 1) -> <k> q2 (p2 w @ k) @ i ]
+                           (connAndNoDiag (fiber A B f y) w (q0,q1) (q2 w) @ i @ j)
+          in sq @ i)
+
+
+-- propIsEquiv with connections
+-- propIsEquivConn (A B : U) (f : A -> B) : prop (isEquiv A B f) =
+--   \(u0 u1 : isEquiv A B f) ->
+--   <i> \(y : B) -> propIsContrConn (fiber A B f y) (u0 y) (u1 y) @ i
+
+-- The normal form of propIsEquiv:
+-- npropIsEquiv (A B : U) (f : A -> B) : prop (isEquiv A B f) =
+--   \(u0 u1 : isEquiv A B f) -> undefined
+
+-- -- The normal form of propIsEquivConn:
+-- npropIsEquivConn (A B : U) (f : A -> B) : prop (isEquiv A B f) =
+--   \(u0 u1 : isEquiv A B f) -> undefined
+
+
+iso (A B : U) : U = (f : A -> B) * (g : B -> A)
+                  * (_ : (b : B) -> Path B (f (g b)) b)
+                  * ((a : A) -> Path A (g (f a)) a)
+
+lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
+  Path (fiber A B i.1 b) f0 f1 =
+  let f : A -> B = i.1
+      g : B -> A = i.2.1
+      fg : (b : B) -> Path B (f (g b)) b = i.2.2.1
+      gf : (a : A) -> Path A (g (f a)) a = i.2.2.2
+      x0 : A = f0.1
+      p0 : Path B (f x0) b = f0.2
+      x1 : A = f1.1
+      p1 : Path B (f x1) b = f1.2
+
+      l0 : Path A x0 (g b) =
+        <i> hcom 0->1 A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+      sq0 : PathP (<i> Path A (g (p0 @ i)) (l0 @ i)) (gf x0) (<_> g b) =
+        <i j> hcom 0->j A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+
+      l1 : Path A x1 (g b) =
+        <i> hcom 0->1 A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+      sq1 : PathP (<i> Path A (g (p1 @ i)) (l1 @ i)) (gf x1) (<_> g b) =
+        <i j> hcom 0->j A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+
+      l2 : Path A x0 x1 = <i> hcom 1->0 A [(i=0) -> l0, (i=1) -> l1] (g b)
+      sq2 : PathP (<i> Path A (l2 @ i) (g b)) l0 l1 =
+        <i j> hcom 1->j A [(i=0) -> l0, (i=1) -> l1] (g b)
+  in <i> (l2 @ i
+         ,<j> hcom 0->1 B [(i=0) -> fg (p0 @ j)
+                          ,(i=1) -> fg (p1 @ j)
+                          ,(j=0) -> fg (f (l2 @ i))
+                          ,(j=1) -> fg b]
+                          (f (hcom 1->0 A [(i=0) -> sq0 @ j
+                                          ,(i=1) -> sq1 @ j
+                                          ,(j=0) -> gf (l2 @ i)
+                                          ,(j=1) -> <_> g b]
+                                          (sq2 @ i @ j))))
+
+-- Version of lemIso with heavy use of line types:
+lemIso (A B : U) (i : iso A B) (b : B) (f0 f1 : fiber A B i.1 b) :
+  Path (fiber A B i.1 b) f0 f1 =
+  let f : A -> B = i.1
+      g : B -> A = i.2.1
+      fg : (b : B) -> Path B (f (g b)) b = i.2.2.1
+      gf : (a : A) -> Path A (g (f a)) a = i.2.2.2
+      x0 : A = f0.1
+      p0 : Path B (f x0) b = f0.2
+      x1 : A = f1.1
+      p1 : Path B (f x1) b = f1.2
+
+      sq0 : Line (Line A) =
+        <i j> hcom 0->j A [(i=0) -> gf x0, (i=1) -> <_> g b] (g (p0 @ i))
+
+      sq1 : Line (Line A) =
+        <i j> hcom 0->j A [(i=0) -> gf x1, (i=1) -> <_> g b] (g (p1 @ i))
+
+      sq2 : Line (Line A) =
+        <i j> hcom 1->j A [(i=0) -> <k> sq0 @ k @ 1
+                          ,(i=1) -> <k> sq1 @ k @ 1] (g b)
+  in <i> (sq2 @ i @ 0
+         ,<j> hcom 0->1 B [(i=0) -> fg (p0 @ j)
+                          ,(i=1) -> fg (p1 @ j)
+                          ,(j=0) -> fg (f (sq2 @ i @ 0))
+                          ,(j=1) -> fg b]
+                          (f (hcom 1->0 A [(i=0) -> sq0 @ j
+                                          ,(i=1) -> sq1 @ j
+                                          ,(j=0) -> gf (sq2 @ i @ 0)
+                                          ,(j=1) -> <_> g b]
+                                          (sq2 @ i @ j))))
+
+isoToEquiv (A B : U) (i : iso A B) : equiv A B =
+  (i.1,\(b : B) -> ((i.2.1 b,i.2.2.1 b),\(fib : fiber A B i.1 b) ->
+  lemIso A B i b fib (i.2.1 b,i.2.2.1 b)))
+
+
+---
+
+data N0 =
+
+efq (A : U) : N0 -> A = split {}
+not (A : U) : U = A -> N0
+
+data Unit = tt
+
+propUnit : prop Unit = split
+ tt -> split@((x:Unit) -> Path Unit tt x) with
+  tt -> <i> tt
+
+setUnit : set Unit = propSet Unit propUnit
+
+data or (A B : U) = inl (a : A)
+                  | inr (b : B)
+
+propOr (A B : U) (hA : prop A) (hB : prop B) (h : A -> not B) : prop (or A B) = split
+    inl a' -> split@((b : or A B) -> Path (or A B) (inl a') b) with
+        inl b' -> <i> inl (hA a' b' @ i)
+        inr b' -> efq (Path (or A B) (inl a') (inr b')) (h a' b')
+    inr a' -> split@((b : or A B) -> Path (or A B) (inr a') b) with
+        inl b' -> efq (Path (or A B) (inr a') (inl b')) (h b' a')
+        inr b' -> <i> inr (hB a' b' @ i)
+
+stable (A:U) : U = not (not A) -> A
+
+const (A : U) (f : A -> A) : U = (x y : A) -> Path A (f x) (f y)
+
+exConst (A : U) : U = (f:A -> A) * const A f
+
+propN0 : prop N0 = \ (x y:N0) -> efq (Path N0 x y) x
+
+propNot (A:U) : prop (not A) = \ (f g:not A) -> <i>\(x:A) -> (propN0 (f x) (g x))@i
+
+dNot (A:U) (a:A) : not (not A) = \ (h : not A) -> h a
+
+dec (A : U) : U = or A (not A)
+
+propDec (A : U) (h : prop A) : prop (dec A) =
+  propOr A (not A) h (propNot A) (\(x : A) (h : not A) -> h x)
+
+decEqCong (A B : U) (f : A -> B) (g : B -> A) : dec A -> dec B = split
+  inl a -> inl (f a)
+  inr h -> inr (\ (b:B) -> h (g b))
+
+decStable (A:U) : dec A -> stable A = split
+ inl a -> \ (h :not (not A)) -> a
+ inr b -> \ (h :not (not A)) -> efq A (h b)
+
+decConst (A : U) : dec A -> exConst A = split
+  inl a -> (\ (x:A)  -> a, \ (x y:A) -> refl A a)
+  inr h -> (\ (x:A) -> x, \ (x y:A) -> efq (Path A x y) (h x))
+
+stableConst (A : U) (sA: stable A) : exConst A =
+ (\ (x:A) -> sA (dNot A x),\ (x y:A) -> <i>sA (propNot (not A) (dNot A x) (dNot A y) @ i))
+
+discrete (A : U) : U = (a b : A) -> dec (Path A a b)
+
+injective (A B : U) (f : A -> B) : U =
+  (a0 a1 : A) -> Path B (f a0) (f a1) -> Path A a0 a1

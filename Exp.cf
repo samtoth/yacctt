@@ -1,0 +1,94 @@
+entrypoints Module, Exp ;
+
+comment "--" ;
+comment "{-" "-}" ;
+
+layout "where", "let", "split", "mutual", "with" ;
+layout stop "in" ;
+-- Do not use layout toplevel as it makes pExp fail!
+
+Module.   Module ::= "module" AIdent "where" "{" [Imp] [Decl] "}" ;
+
+Import.   Imp ::= "import" AIdent ;
+separator Imp ";" ;
+
+DeclDef.             Decl ::= AIdent [Tele] ":" Exp "=" ExpWhere ;
+DeclData.            Decl ::= "data" AIdent [Tele] "=" [Label] ;
+DeclHData.           Decl ::= "hdata" AIdent [Tele] "=" [Label] ;
+DeclSplit.           Decl ::= AIdent [Tele] ":" Exp "=" "split" "{" [Branch] "}" ;
+DeclUndef.           Decl ::= AIdent [Tele] ":" Exp "=" "undefined" ;
+DeclMutual.          Decl ::= "mutual" "{" [Decl] "}" ;
+DeclOpaque.          Decl ::= "opaque" AIdent ;
+DeclTransparent.     Decl ::= "transparent" AIdent ;
+DeclTransparentAll.  Decl ::= "transparent_all" ;
+separator            Decl ";" ;
+
+Where.    ExpWhere ::= Exp "where" "{" [Decl] "}" ;
+NoWhere.  ExpWhere ::= Exp ;
+
+Let.          Exp  ::= "let" "{" [Decl] "}" "in" Exp ;
+Lam.          Exp  ::= "\\" [PTele] "->" Exp ;
+PLam.         Exp  ::= "<" [AIdent] ">" Exp ;
+Split.        Exp  ::= "split@" Exp "with" "{" [Branch] "}" ;
+Fun.          Exp1 ::= Exp2 "->" Exp1 ;
+Pi.           Exp1 ::= [PTele] "->" Exp1 ;
+Sigma.        Exp1 ::= [PTele] "*" Exp1 ;
+AppII.        Exp2 ::= Exp2 "@" II ;
+App.          Exp2 ::= Exp2 Exp3 ;
+PathP.        Exp3 ::= "PathP" Exp4 Exp4 Exp4 ;
+LineP.        Exp3 ::= "LineP" Exp4 ;
+Coe.          Exp3 ::= "coe" II "->" II Exp4 Exp4 ;
+HCom.         Exp3 ::= "hcom" II "->" II Exp4 System Exp4 ;
+Com.          Exp3 ::= "com" II "->" II Exp4 System Exp4 ;
+Box.          Exp3 ::= "box" II "->" II System Exp4 ;
+Cap.          Exp3 ::= "cap" II "<-" II System Exp4 ;
+V.            Exp3 ::= "V" II Exp4 Exp4 Exp4 ;
+Vin.          Exp3 ::= "Vin" II Exp4 Exp4 ;
+Vproj.        Exp3 ::= "Vproj" II Exp4 Exp4 Exp4 Exp4 ;
+Fst.          Exp4 ::= Exp4 ".1" ;
+Snd.          Exp4 ::= Exp4 ".2" ;
+Pair.         Exp5 ::= "(" Exp "," [Exp] ")" ;
+Var.          Exp5 ::= AIdent ;
+PCon.         Exp5 ::= AIdent "{" Exp "}" ; -- c{T A B} x1 x2 @ phi
+U.            Exp5 ::= "U" ;
+Hole.         Exp5 ::= HoleIdent ;
+coercions Exp 5 ;
+separator nonempty Exp "," ;
+
+Dir0.       Dir ::= "0" ;
+Dir1.       Dir ::= "1" ;
+
+System.     System ::= "[" [Side] "]" ;
+
+Side.     Side ::= Face "->" Exp ;
+separator Side "," ;
+
+Face.     Face ::= "(" II "=" II ")" ; -- Maybe (AIdent,II)?
+
+Atom.     II ::= AIdent ;
+Dir.      II ::= Dir ;
+
+-- Branches
+OBranch.   Branch ::= AIdent [AIdent] "->" ExpWhere ;
+-- TODO: better have ... @ i @ j @ k -> ... ?
+PBranch.   Branch ::= AIdent [AIdent] "@" [AIdent] "->" ExpWhere ;
+separator Branch ";" ;
+
+-- Labelled sum alternatives
+OLabel.   Label ::= AIdent [Tele] ;
+PLabel.   Label ::= AIdent [Tele] "<" [AIdent] ">" System ;
+separator Label "|" ;
+
+-- Telescopes
+Tele.     Tele ::= "(" AIdent [AIdent] ":" Exp ")" ;
+terminator Tele "" ;
+
+-- Nonempty telescopes with Exp:s, this is hack to avoid ambiguities
+-- in the grammar when parsing Pi
+PTele.    PTele ::= "(" Exp ":" Exp ")" ;
+terminator nonempty PTele "" ;
+
+position token AIdent ('_')|(letter)(letter|digit|'\''|'_')*|('!')(digit)* ;
+separator AIdent "" ;
+
+position token HoleIdent '?' ;
